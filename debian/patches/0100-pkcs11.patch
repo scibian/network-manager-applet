@@ -1,0 +1,170 @@
+Description: Prompt for the PIN of a PKCS11 token for EAP-TLS-PKCS11
+Forwarded: no
+Author: Alexis Bezverkhyy <alexis-externe.bezverkhyy@edf.fr>
+Last-Update: 2015-05-12
+
+diff -x .pc -x debian -ruN network-manager-applet-0.9.10.0/src/wireless-security/eap-method-tls.c network-manager-applet-0.9.10.0.patched/src/wireless-security/eap-method-tls.c
+--- network-manager-applet-0.9.10.0/src/wireless-security/eap-method-tls.c	2015-05-12 14:58:27.640390227 +0200
++++ network-manager-applet-0.9.10.0.patched/src/wireless-security/eap-method-tls.c	2015-05-12 14:56:36.593872576 +0200
+@@ -400,6 +400,57 @@
+ 	}
+ }
+ 
++static void
++pkcs11_fill_connection (EAPMethod *parent, NMConnection *connection, NMSettingSecretFlags flags)
++{
++	NMSetting8021x *s_8021x;
++	GtkWidget *widget;
++
++	g_warning ("pkcs11_fill_connection called");
++	s_8021x = nm_connection_get_setting_802_1x (connection);
++	g_assert (s_8021x);
++
++	widget = GTK_WIDGET (gtk_builder_get_object (parent->builder, "eap_tls_pin_entry"));
++	g_assert (widget);
++	g_object_set (s_8021x, NM_SETTING_802_1X_PIN, gtk_entry_get_text (GTK_ENTRY (widget)), NULL);
++
++	g_object_set (s_8021x, NM_SETTING_802_1X_PIN_FLAGS, NM_SETTING_SECRET_FLAG_AGENT_OWNED, NULL);
++}
++
++static gboolean
++pkcs11_validate (EAPMethod *parent)
++{
++	GtkWidget *widget;
++	const char *pin;
++
++	g_warning ("pkcs11_validate called");
++	widget = GTK_WIDGET (gtk_builder_get_object (parent->builder, "eap_tls_pin_entry"));
++	g_assert (widget);
++	pin = gtk_entry_get_text (GTK_ENTRY (widget));
++	g_warning ("pkcs11_validate pin=%s", pin);
++	if (!pin || !strlen (pin))
++		return FALSE;
++
++	return TRUE;
++}
++
++static void
++pkcs11_add_to_size_group (EAPMethod *parent, GtkSizeGroup *group)
++{
++	GtkWidget *widget;
++
++	g_warning ("pkcs11_add_to_size_group called");
++	widget = GTK_WIDGET (gtk_builder_get_object (parent->builder, "eap_tls_pin_label"));
++	g_assert (widget);
++	gtk_size_group_add_widget (group, widget);
++}
++
++static void
++pkcs11_update_secrets (EAPMethod *parent, NMConnection *connection)
++{
++	g_warning ("pkcs11_update_secrets called");
++}
++
+ EAPMethodTLS *
+ eap_method_tls_new (WirelessSecurity *ws_parent,
+                     NMConnection *connection,
+@@ -412,6 +463,32 @@
+ 	NMSetting8021x *s_8021x = NULL;
+ 	gboolean ca_not_required = FALSE;
+ 
++	if (connection)
++		s_8021x = nm_connection_get_setting_802_1x (connection);
++   
++	/* PKCS11 specific pin dialog */ 
++	if(nm_setting_802_1x_get_engine(s_8021x))
++	{
++		parent = eap_method_init (sizeof (EAPMethodTLS),
++								  pkcs11_validate, // validate
++								  pkcs11_add_to_size_group, // add to group
++								  pkcs11_fill_connection, // fill_connection
++								  pkcs11_update_secrets, // update_secrets
++								  NULL, // destroy
++								  UIDIR "/eap-method-tls-pkcs11.ui",
++								  "eap_tls_notebook", // ui widget
++								  "eap_tls_pin_entry", // default field
++								  phase2);
++		widget = GTK_WIDGET (gtk_builder_get_object (parent->builder, "eap_tls_pin_entry"));
++		g_assert (widget);
++		g_signal_connect (G_OBJECT (widget), "changed",
++						  (GCallback) wireless_security_changed_cb,
++						  ws_parent);
++	    method = (EAPMethodTLS *) parent;
++	    method->editing_connection = secrets_only ? FALSE : TRUE;
++		return method;
++	}
++
+ 	parent = eap_method_init (sizeof (EAPMethodTLS),
+ 	                          validate,
+ 	                          add_to_size_group,
+@@ -431,9 +508,6 @@
+ 	method = (EAPMethodTLS *) parent;
+ 	method->editing_connection = secrets_only ? FALSE : TRUE;
+ 
+-	if (connection)
+-		s_8021x = nm_connection_get_setting_802_1x (connection);
+-
+ 	widget = GTK_WIDGET (gtk_builder_get_object (parent->builder, "eap_tls_ca_cert_not_required_checkbox"));
+ 	g_assert (widget);
+ 	g_signal_connect (G_OBJECT (widget), "toggled",
+diff -x .pc -x debian -ruN network-manager-applet-0.9.10.0/src/wireless-security/eap-method-tls-pkcs11.ui network-manager-applet-0.9.10.0.patched/src/wireless-security/eap-method-tls-pkcs11.ui
+--- network-manager-applet-0.9.10.0/src/wireless-security/eap-method-tls-pkcs11.ui	1970-01-01 01:00:00.000000000 +0100
++++ network-manager-applet-0.9.10.0.patched/src/wireless-security/eap-method-tls-pkcs11.ui	2015-05-12 14:37:20.775695529 +0200
+@@ -0,0 +1,46 @@
++<?xml version="1.0"?>
++<interface>
++  <!-- interface-requires gtk+ 2.6 -->
++  <!-- interface-naming-policy toplevel-contextual -->
++      <object class="GtkNotebook" id="eap_tls_notebook">
++        <property name="visible">True</property>
++        <property name="show_tabs">False</property>
++        <property name="show_border">False</property>
++        <child>
++          <object class="GtkTable" id="table8">
++            <property name="visible">True</property>
++            <property name="n_rows">1</property>
++            <property name="n_columns">2</property>
++            <property name="column_spacing">12</property>
++            <property name="row_spacing">6</property>
++            <child>
++              <object class="GtkLabel" id="eap_tls_pin_label">
++                <property name="visible">True</property>
++                <property name="xalign">0</property>
++                <property name="label" translatable="yes">PIN</property>
++                <property name="use_underline">True</property>
++                <property name="mnemonic_widget">eap_tls_pin_entry</property>
++              </object>
++              <packing>
++                <property name="x_options">GTK_FILL</property>
++                <property name="y_options"/>
++              </packing>
++            </child>
++            <child>
++              <object class="GtkEntry" id="eap_tls_pin_entry">
++                <property name="visible">True</property>
++                <property name="can_focus">True</property>
++                <property name="activates_default">True</property>
++                <property name="visibility">False</property>
++                <property name="invisible_char">●</property>
++              </object>
++              <packing>
++                <property name="left_attach">1</property>
++                <property name="right_attach">2</property>
++                <property name="y_options"/>
++              </packing>
++            </child>
++          </object>
++        </child>
++      </object>
++</interface>
+diff -x .pc -x debian -ruN network-manager-applet-0.9.10.0/src/wireless-security/Makefile.am network-manager-applet-0.9.10.0.patched/src/wireless-security/Makefile.am
+--- network-manager-applet-0.9.10.0/src/wireless-security/Makefile.am	2015-05-12 14:58:27.640390227 +0200
++++ network-manager-applet-0.9.10.0.patched/src/wireless-security/Makefile.am	2015-05-12 14:37:20.775695529 +0200
+@@ -49,6 +49,7 @@
+ 	eap-method-peap.ui \
+ 	eap-method-simple.ui \
+ 	eap-method-tls.ui \
++	eap-method-tls-pkcs11.ui \
+ 	eap-method-ttls.ui \
+ 	ws-dynamic-wep.ui \
+ 	ws-leap.ui \
