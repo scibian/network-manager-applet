@@ -1,3 +1,13 @@
+network-manager-applet (0.9.10.0-2scibian1) jessie; urgency=medium
+
+  [ Scibian Packaging Team ]
+  * Add git-buildpackage config
+
+  [ Alexis Bezverkhyy ]
+  * Prompt for the PIN of a PKCS11 token
+
+ -- Scibian Packaging Team <packaging@scibian.org>  Tue, 23 Aug 2016 15:13:12 +0200
+
 network-manager-applet (0.9.10.0-2) unstable; urgency=medium
 
   * Disable bluetooth support. The gnome-bluetooth plugin no longer builds
