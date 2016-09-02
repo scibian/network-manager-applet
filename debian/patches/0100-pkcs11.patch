@@ -1,5 +1,5 @@
 Description: Prompt for the PIN of a PKCS11 token for EAP-TLS-PKCS11
-Forwarded: no
+Forwarded: https://bugzilla.gnome.org/show_bug.cgi?id=719982
 Author: Alexis Bezverkhyy <alexis-externe.bezverkhyy@edf.fr>
 Last-Update: 2015-05-12
 
